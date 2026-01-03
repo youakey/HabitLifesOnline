@@ -24,17 +24,29 @@ export async function signOut() {
    ========================= */
 
 export async function ensureSettingsRow(userId: string) {
-  const { data } = await supabase.from("settings").select("*").eq("user_id", userId).maybeSingle();
+  // Try to read (fast path)
+  const { data } = await supabase
+    .from("settings")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
   if (data) return data as SettingsRow;
 
-  const { data: inserted, error } = await supabase
+  // If missing (or race condition), create safely
+  const { data: upserted, error } = await supabase
     .from("settings")
-    .insert({ user_id: userId, nutrition_enabled: false, sleep_enabled: false })
+    .upsert(
+      { user_id: userId, nutrition_enabled: false, sleep_enabled: false },
+      { onConflict: "user_id" }
+    )
     .select("*")
     .single();
+
   if (error) throw error;
-  return inserted as SettingsRow;
+  return upserted as SettingsRow;
 }
+
 
 export async function getSettings(userId: string) {
   const { data, error } = await supabase.from("settings").select("*").eq("user_id", userId).single();
